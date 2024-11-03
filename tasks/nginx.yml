@@ -1,0 +1,68 @@
+- name: remove default nginx
+  file:
+    path: /etc/nginx/sites-available/default
+    state: absent
+
+- name: copy webserver config
+  template:
+    src: templates/nginx.conf.j2
+    dest: /etc/nginx/conf.d/server.conf
+    owner: root
+    group: root
+    mode: "0744"
+
+- name: Create login for nginx
+  community.general.htpasswd:
+    path: "/etc/nginx/.pass_{{ nginx_login }}"
+    name: "{{ nginx_login }}"
+    password: "{{ nginx_pass }}"
+    owner: root
+    group: www-data
+    mode: 0640
+
+- name: Get the webserver
+  git:
+    repo: "{{ git_repo }}"
+    dest: "{{ playbook_dir }}/git_repos/webserver1"
+    clone: yes
+    update: yes
+    force: true
+- name: Change ownership of webserevr1
+  file:
+    path: "{{ playbook_dir }}/git_repos/webserver1"
+    owner: "root"
+    group: "www-data"
+    recurse: "yes"
+    state: "directory"
+- name: test if we arealdy added root
+  shell: "grep {{ playbook_dir }}/git_repos/webserver1/app.py APPLICATION_ROOT"
+  register: test_grep
+- name: tell flask to change URI
+  lineinfile:
+    path: "{{ playbook_dir }}/git_repos/webserver1/app.py"
+    insertafter: "^app = Flask\\(__name__\\)"
+    line: "app.config['APPLICATION_ROOT'] = {{ server_name }}"
+  when: test_grep.stdout == "0"
+- name: install necessary packages for python3
+  apt:
+    name: python3-flask
+    state: present
+    
+    
+- name: make webserver1 a service
+  template: 
+    src: templates/webserver1.service.j2
+    dest: "/etc/systemd/system/{{ service_name }}.service"
+- name: systemctl it
+  command: "systemctl start {{ service_name }}.service"
+  register: start_res
+- name: start/restart service also ensure its enabled
+  systemd_service:
+    state: started
+    enabled: true
+    name: "{{ service_name }}" 
+  when: not start_res is skipped
+- name: restart nginx
+  service: 
+    name: nginx
+    state: restarted

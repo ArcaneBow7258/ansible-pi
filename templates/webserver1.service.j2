@@ -1,0 +1,9 @@
+[Unit]
+Description=Service for {{ service_name }} from {{ git_repo }}
+After=network.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/python {{ playbook_dir }}/git_repos/webserver1/app.py
+Restart=always
+[Install]
+WantedBy=multi-user.target
